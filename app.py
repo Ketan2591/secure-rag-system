@@ -4,9 +4,7 @@ import streamlit as st
 from src.rag_pipeline import ingest_document, answer_question
 
 
-# ============================================================
-# PAGE CONFIGURATION
-# ============================================================
+# Page setup
 
 st.set_page_config(
     page_title="SecureRAG | Private Document Intelligence",
@@ -16,16 +14,13 @@ st.set_page_config(
 )
 
 
-# ============================================================
-# CUSTOM CSS
-# ============================================================
+# Styling
 
 st.markdown(
     """
 <style>
-/* ============================================================
-   GLOBAL
-   ============================================================ */
+
+/* GLOBAL */
 
 .stApp {
     background:
@@ -52,9 +47,7 @@ st.markdown(
 }
 
 
-/* ============================================================
-   SIDEBAR
-   ============================================================ */
+/* SIDEBAR */
 
 [data-testid="stSidebar"] {
     background: linear-gradient(
@@ -175,9 +168,7 @@ st.markdown(
 }
 
 
-/* ============================================================
-   HERO
-   ============================================================ */
+/* HERO */
 
 .hero {
     position: relative;
@@ -255,9 +246,7 @@ st.markdown(
 }
 
 
-/* ============================================================
-   STATUS CARDS
-   ============================================================ */
+/* STATUS CARDS */
 
 .status-card {
     background: rgba(255, 255, 255, 0.97);
@@ -304,9 +293,7 @@ st.markdown(
 }
 
 
-/* ============================================================
-   SECTION HEADERS
-   ============================================================ */
+/* SECTION HEADERS */
 
 .section-header {
     margin-top: 5px;
@@ -328,9 +315,7 @@ st.markdown(
 }
 
 
-/* ============================================================
-   FILE UPLOADER
-   ============================================================ */
+/* FILE UPLOADER */
 
 [data-testid="stFileUploader"] {
     background: transparent !important;
@@ -368,9 +353,7 @@ st.markdown(
 }
 
 
-/* ============================================================
-   BUTTONS
-   ============================================================ */
+/* BUTTONS */
 
 .stButton > button {
     min-height: 42px;
@@ -395,9 +378,7 @@ button[kind="primary"] p {
 }
 
 
-/* ============================================================
-   SUCCESS / INFORMATION
-   ============================================================ */
+/* SUCCESS / INFORMATION */
 
 .processing-success {
     background: #f0fdf4;
@@ -420,9 +401,7 @@ button[kind="primary"] p {
 }
 
 
-/* ============================================================
-   EXPANDERS
-   ============================================================ */
+/* EXPANDERS */
 
 [data-testid="stExpander"] {
     background: #ffffff !important;
@@ -461,9 +440,7 @@ button[kind="primary"] p {
 }
 
 
-/* ============================================================
-   DOCUMENTS
-   ============================================================ */
+/* DOCUMENTS */
 
 .document-card {
     background: #f8fafc;
@@ -486,9 +463,7 @@ button[kind="primary"] p {
 }
 
 
-/* ============================================================
-   CHAT
-   ============================================================ */
+/* CHAT */
 
 [data-testid="stChatMessage"] {
     border: 1px solid #e2e8f0 !important;
@@ -521,24 +496,26 @@ button[kind="primary"] p {
 }
 
 [data-testid="stChatInput"] {
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
+    background: #1e293b !important;
+    border: 1px solid #6366f1 !important;
     border-radius: 12px !important;
 }
 
 [data-testid="stChatInput"] textarea {
-    color: #0f172a !important;
-    caret-color: #4f46e5 !important;
+    background: transparent !important;
+    color: #f8fafc !important;
+    -webkit-text-fill-color: #f8fafc !important;
+    caret-color: #a78bfa !important;
 }
 
 [data-testid="stChatInput"] textarea::placeholder {
     color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+    opacity: 1 !important;
 }
 
 
-/* ============================================================
-   SOURCE CARDS
-   ============================================================ */
+/* SOURCE CARDS */
 
 .source-card {
     background: #f8fafc;
@@ -556,9 +533,7 @@ button[kind="primary"] p {
 }
 
 
-/* ============================================================
-   STREAMLIT ALERTS
-   ============================================================ */
+/* STREAMLIT ALERTS */
 
 [data-testid="stAlert"] {
     border-radius: 11px !important;
@@ -569,9 +544,7 @@ button[kind="primary"] p {
 }
 
 
-/* ============================================================
-   FOOTER
-   ============================================================ */
+/* FOOTER */
 
 .app-footer {
     text-align: center;
@@ -589,9 +562,7 @@ footer {
 }
 
 
-/* ============================================================
-   RESPONSIVE
-   ============================================================ */
+/* RESPONSIVE */
 
 @media (max-width: 900px) {
     .block-container {
@@ -613,9 +584,8 @@ footer {
 )
 
 
-# ============================================================
-# SESSION STATE
-# ============================================================
+# Session variables
+
 
 if "processed_files" not in st.session_state:
     st.session_state.processed_files = {}
@@ -627,15 +597,9 @@ if "active_user" not in st.session_state:
     st.session_state.active_user = ""
 
 
-# ============================================================
-# SIDEBAR
-# ============================================================
+# Sidebar
 
 with st.sidebar:
-
-    # IMPORTANT:
-    # HTML is deliberately kept left-aligned inside the string.
-    # This prevents Markdown from rendering it as a code block.
 
     st.markdown(
         """<div class="sidebar-brand">
@@ -672,55 +636,49 @@ with st.sidebar:
 
     st.markdown(
         """<div class="sidebar-divider"></div>
-<div class="sidebar-heading">Security Controls</div>
-<div class="security-control">
-<div class="security-control-title">🛡️ PII Masking</div>
-<div class="security-control-text">Sensitive information is anonymized before embedding.</div>
-</div>
-<div class="security-control">
-<div class="security-control-title">🔒 Tenant Isolation</div>
-<div class="security-control-text">Retrieval is filtered by the active Customer ID.</div>
-</div>
-<div class="security-control">
-<div class="security-control-title">🧠 Local Embeddings</div>
-<div class="security-control-text">Document embeddings are generated locally.</div>
-</div>
-<div class="security-control">
-<div class="security-control-title">📚 Grounded Answers</div>
-<div class="security-control-text">Responses are generated from retrieved document context.</div>
-</div>
-<div class="sidebar-divider"></div>
-<div class="sidebar-footer">SecureRAG Prototype<br>Assessment Build • v1.0.0</div>""",
+            <div class="sidebar-heading">Security Controls</div>
+            <div class="security-control">
+            <div class="security-control-title">🛡️ PII Masking</div>
+            <div class="security-control-text">Sensitive information is anonymized before embedding.</div>
+            </div>
+            <div class="security-control">
+            <div class="security-control-title">🔒 Tenant Isolation</div>
+            <div class="security-control-text">Retrieval is filtered by the active Customer ID.</div>
+            </div>
+            <div class="security-control">
+            <div class="security-control-title">🧠 Local Embeddings</div>
+            <div class="security-control-text">Document embeddings are generated locally.</div>
+            </div>
+            <div class="security-control">
+            <div class="security-control-title">📚 Grounded Answers</div>
+            <div class="security-control-text">Responses are generated from retrieved document context.</div>
+            </div>
+            <div class="sidebar-divider"></div>
+            <div class="sidebar-footer">SecureRAG Prototype<br>Assessment Build • v1.0.0</div>""",
         unsafe_allow_html=True,
     )
 
 
-# ============================================================
-# RESET CHAT WHEN TENANT CHANGES
-# ============================================================
+# Reset chat when customer changes
 
 if clean_user_id != st.session_state.active_user:
     st.session_state.messages = []
     st.session_state.active_user = clean_user_id
 
 
-# ============================================================
-# HERO
-# ============================================================
+# Hero
 
 st.markdown(
     """<div class="hero">
-<div class="hero-badge">SECURE DOCUMENT INTELLIGENCE</div>
-<div class="hero-title">Ask your documents. Keep your data private.</div>
-<div class="hero-text">A secure Retrieval-Augmented Generation workspace for querying customer documents with PII masking, tenant-isolated retrieval, local embeddings and source-grounded AI responses.</div>
-</div>""",
+        <div class="hero-badge">SECURE DOCUMENT INTELLIGENCE</div>
+        <div class="hero-title">Ask your documents. Keep your data private.</div>
+        <div class="hero-text">A secure Retrieval-Augmented Generation workspace for querying customer documents with PII masking, tenant-isolated retrieval, local embeddings and source-grounded AI responses.</div>
+        </div>""",
     unsafe_allow_html=True,
 )
 
 
-# ============================================================
-# STATUS CARDS
-# ============================================================
+# Status Cards
 
 status_col1, status_col2, status_col3, status_col4 = st.columns(4)
 
@@ -770,9 +728,7 @@ with status_col4:
 st.write("")
 
 
-# ============================================================
-# CURRENT TENANT DOCUMENTS
-# ============================================================
+# Get current customer documents
 
 current_user_files = []
 
@@ -784,9 +740,6 @@ if clean_user_id:
     ]
 
 
-# ============================================================
-# MAIN TWO-COLUMN WORKSPACE
-# ============================================================
 
 document_column, assistant_column = st.columns(
     [1, 1.08],
@@ -794,9 +747,7 @@ document_column, assistant_column = st.columns(
 )
 
 
-# ============================================================
-# LEFT COLUMN — DOCUMENT WORKSPACE
-# ============================================================
+# Document section
 
 with document_column:
 
@@ -875,8 +826,6 @@ with document_column:
                         f"{uploaded_file.name}..."
                     )
 
-                    # Make sure the uploaded file pointer starts
-                    # from the beginning before backend processing.
                     uploaded_file.seek(0)
 
                     result = ingest_document(
@@ -963,9 +912,9 @@ with document_column:
 
                 st.markdown(
                     f"""<div class="document-card">
-<div class="document-name">📄 {filename}</div>
-<div class="document-meta">Pages: {pages} &nbsp;•&nbsp; Chunks: {chunks} &nbsp;•&nbsp; ✓ Securely indexed</div>
-</div>""",
+                        <div class="document-name">📄 {filename}</div>
+                        <div class="document-meta">Pages: {pages} &nbsp;•&nbsp; Chunks: {chunks} &nbsp;•&nbsp; ✓ Securely indexed</div>
+                        </div>""",
                     unsafe_allow_html=True,
                 )
 
@@ -976,17 +925,15 @@ with document_column:
         )
 
 
-# ============================================================
-# RIGHT COLUMN — SECURE ASSISTANT
-# ============================================================
+# Assistant section
 
 with assistant_column:
 
     st.markdown(
         """<div class="section-header">
-<div class="section-title">💬 Secure Document Assistant</div>
-<div class="section-description">Ask questions and receive source-grounded answers from documents belonging only to the active customer workspace.</div>
-</div>""",
+            <div class="section-title">💬 Secure Document Assistant</div>
+            <div class="section-description">Ask questions and receive source-grounded answers from documents belonging only to the active customer workspace.</div>
+            </div>""",
         unsafe_allow_html=True,
     )
 
@@ -1034,16 +981,16 @@ with assistant_column:
                                 source.get(
                                     "page",
                                     "-",
-                                )
                             )
                         )
 
+                                )
                         st.markdown(
                             f"""<div class="source-card">📄 <strong>{source_name}</strong> &nbsp;•&nbsp; Page {source_page}</div>""",
                             unsafe_allow_html=True,
                         )
 
-    # Only enable chat when both customer and documents exist.
+    # Disable chat until documents are available
     chat_disabled = (
         not clean_user_id
         or not bool(current_user_files)
@@ -1141,9 +1088,7 @@ with assistant_column:
                     )
 
 
-# ============================================================
-# FOOTER
-# ============================================================
+# Footer
 
 st.markdown(
     """<div class="app-footer">🔐 SecureRAG &nbsp;•&nbsp; 🛡️ PII Protected &nbsp;•&nbsp; 🔒 Tenant Isolated &nbsp;•&nbsp; 📚 Source Grounded</div>""",
