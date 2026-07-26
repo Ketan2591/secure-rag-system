@@ -366,10 +366,10 @@ The remaining tests verify:
 - Source deduplication
 - Context formatting
 
-Current result:
+Test Result:
 
 ```text
-================ 19 passed ================
+19/19 tests passed successfully.
 ```
 
 ---
