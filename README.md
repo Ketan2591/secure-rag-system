@@ -220,5 +220,5 @@ This project demonstrates application-level security controls for a RAG system. 
 
 ## Author
 
-**Ketankumar Prajapat**
+**Ketankumar Prajapat**<br>
 **AI/ML & Automation Enthusiast**
