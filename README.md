@@ -272,7 +272,7 @@ python -m pytest tests -v
 ### Test Results Summary:
 
 ```text
-============================== 19 passed in 4.12s ==============================
+ 19 passed.
 ```
 
 | Test Suite | Total Tests | Status |
