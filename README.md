@@ -1,4 +1,4 @@
-# 🔐 SecureRAG System v2
+# 🔐 SecureRAG System
 
 SecureRAG is a production-grade, multi-tenant **Retrieval-Augmented Generation (RAG)** application built with Python, Streamlit, LangChain, ChromaDB, and Groq.
 

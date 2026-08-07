@@ -11,7 +11,7 @@ from src.pages.settings import show_settings
 
 # Page Configuration
 st.set_page_config(
-    page_title="SecureRAG v2 | Private Document Workspace",
+    page_title="SecureRAG | Private Document Workspace",
     page_icon="🔐",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -48,7 +48,7 @@ with st.sidebar:
         """
         <div class="sidebar-brand">
             <div class="brand-title">🔐 SecureRAG</div>
-            <div class="brand-subtitle">Private Workspace v2</div>
+            <div class="brand-subtitle">Private Workspace</div>
         </div>
         """,
         unsafe_allow_html=True,
