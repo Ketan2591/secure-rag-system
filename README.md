@@ -293,5 +293,4 @@ This project demonstrates enterprise-grade security concepts for multi-tenant RA
 ## 👤 Author
 
 **Ketankumar Prajapat**  
-*AI & Full-Stack Systems Developer*  
-- GitHub: [@Ketan2591](https://github.com/Ketan2591)
+*AI & Automation Developer*
