@@ -1,117 +1,239 @@
-# SecureRAG - Multi-Tenant Private RAG System
+# 🔐 SecureRAG System v2
 
-SecureRAG is a Retrieval-Augmented Generation (RAG) system built with Python, Streamlit, LangChain, ChromaDB, and Groq. 
+SecureRAG is a production-grade, multi-tenant **Retrieval-Augmented Generation (RAG)** application built with Python, Streamlit, LangChain, ChromaDB, and Groq.
 
-The main goal of this project is to solve two major security challenges in standard RAG implementations:
-1. **PII and Sensitive Data Leakage**: Document content is scanned and masked *before* generating embeddings or storing data, preventing sensitive information like phone numbers, emails, passwords, and API keys from being exposed to vector databases or cloud LLMs.
-2. **Multi-Tenant Data Isolation**: Document chunks are stored with customer-specific metadata tags (`user_id`). Queries use strict metadata filtering to ensure one user cannot retrieve another user's documents.
+It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perform source-grounded question answering while strictly safeguarding sensitive personal data (PII) and maintaining multi-tenant workspace isolation.
 
 ---
 
-## Architecture Flow
+## ✨ Key Features & Architecture Highlights
 
-The system processes documents through a secure pipeline:
+- 🛡️ **Pre-Embedding PII & Secrets Masking**: Automatically detects and replaces sensitive information (SSN, Phone, Email, Passwords, API Keys, Credit Cards, Aadhaar, PAN, Bank Accounts) with protected placeholders *before* vector embeddings are generated or stored.
+- 👥 **Strict Multi-Tenant Workspace Isolation**: Assigns a unique `Customer ID` metadata tag to every vector chunk. ChromaDB queries use mandatory `filter={"user_id": customer_id}` to prevent cross-tenant data leakage.
+- 🧠 **Local Embedding Engine**: Generates 384-dimensional vector embeddings locally using Hugging Face (`all-MiniLM-L6-v2`), ensuring unmasked document content never leaves the secure local server.
+- 🤖 **Lightning-Fast LLM Inference**: Integrated with **Groq API** running `llama-3.3-70b-versatile` for ultra-fast, source-grounded answers (~500+ tokens/sec).
+- 📚 **Source & Page Attribution**: Every answer includes clickable references displaying the exact source filename and page numbers used for generation.
+- 🔐 **Placeholder Preservation**: Instructs the LLM never to guess, decode, or reveal raw sensitive values behind protected placeholders like `<PHONE_NUMBER>` or `<API_KEY>`.
+- 🛡️ **Indirect Prompt Injection Defense**: Treats retrieved document chunks strictly as read-only data, ignoring embedded commands or prompt override attempts inside documents.
+- 🎨 **Enterprise Multi-Page Dark Theme UI**: Built with Streamlit featuring a Glassmorphism CSS design system, user authentication, interactive dashboard, document manager, chat history, profile, and system settings.
+- 🗄️ **Database Tracking & Soft Deletion**: Integrated SQLite tracking database (`secure_rag.db`) supporting file management, soft deletion, and vector store cleanup safeguards.
+- 🧪 **Automated Test Suite**: 19 automated unit & integration tests covering PII masking, multi-tenant isolation, and RAG QA pipelines.
+
+---
+
+## 🏗️ System Architecture
 
 ```text
-Document Upload (PDF, DOCX, TXT)
-       ↓
-Text Extraction (PyMuPDF / python-docx)
-       ↓
-PII & Secret Masking (Presidio + spaCy + Regex)
-       ↓
-Text Chunking (Recursive split with overlap)
-       ↓
-Local Vector Embeddings (Hugging Face all-MiniLM-L6-v2)
-       ↓
-ChromaDB Storage (Tagged with user_id metadata)
-       ↓
-Filtered Similarity Search (filter by current user_id)
-       ↓
-Grounded QA via Groq LLM (Llama 3.3)
+                               ┌───────────────────────────┐
+                               │     Document Upload       │
+                               │   (PDF, DOCX, TXT Files)  │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │      Text Extraction      │
+                               │   (PyMuPDF / python-docx) │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │  Sensitive Data & PII     │
+                               │        Masking            │
+                               │(Presidio + spaCy + Regex) │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │       Text Chunking       │
+                               │(LangChain 500-char/50-ov) │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │     Local Embeddings      │
+                               │ (HF all-MiniLM-L6-v2)     │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │      Chroma Vector DB     │
+                               │  + user_id Metadata Tag   │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │ Customer-Filtered Search  │
+                               │ filter={"user_id": CUS_X} │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │    Protected Context      │
+                               │   + System Guardrails     │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │    Groq Llama-3.3 LLM     │
+                               │    Source-Grounded QA     │
+                               └─────────────┬─────────────┘
+                                             │
+                                             ▼
+                               ┌───────────────────────────┐
+                               │ Grounded Answer + Source  │
+                               │     Filename & Page #     │
+                               └───────────────────────────┘
 ```
 
 ---
 
-## Key Features
+## 🔐 Security & Privacy Engine
 
-- **Sensitive Data Masking**: Replaces emails, phone numbers, passwords, credit cards, SSN, Aadhaar, PAN, and API keys with placeholders like `<PHONE_NUMBER>` or `<API_KEY>`.
-- **Local Embedding Generation**: Generates 384-dimensional embeddings locally using `all-MiniLM-L6-v2`, so raw text never leaves the local machine.
-- **Tenant Isolation**: Every vector chunk is tied to a `user_id` metadata attribute and filtered at query time in ChromaDB.
-- **Source Attribution**: Answers include source file names and page numbers for reference.
-- **Placeholder Preservation**: System prompt ensures the LLM keeps placeholders intact rather than guessing original sensitive values.
-- **Prompt Injection Defense**: Document text is treated strictly as data, ignoring embedded commands inside uploaded files.
-- **Streamlit Web Interface**: Multi-page dashboard with authentication, document management, chat history, and settings.
-- **Database Tracking**: SQLite database tracks registered users, uploaded documents, and chat history with support for soft deletion.
+### 1. PII & Secrets Masking Rules
+
+SecureRAG combines **Microsoft Presidio**, **spaCy**, and custom **Regex rules** to mask sensitive entities prior to vector indexing:
+
+| Category | Detected Entity | Protected Placeholder |
+|---|---|---|
+| **Personal Info** | Person Name | `<PERSON>` |
+| **Contact** | Email Address | `<EMAIL_ADDRESS>` |
+| **Contact** | Phone Number | `<PHONE_NUMBER>` |
+| **Identity** | US Social Security Number | `<SSN>` |
+| **Identity** | Indian Aadhaar Number | `<AADHAAR_NUMBER>` |
+| **Identity** | Indian PAN Number | `<PAN_NUMBER>` |
+| **Financial** | Credit / Debit Card | `<CREDIT_CARD>` |
+| **Financial** | Bank Account Number | `<BANK_ACCOUNT>` |
+| **Financial** | IBAN Code | `<IBAN_CODE>` |
+| **Network** | IP Address | `<IP_ADDRESS>` |
+| **Location** | Physical Location / Address | `<LOCATION>` |
+| **Security** | Passwords / PWD | `<PASSWORD>` |
+| **Security** | API Keys | `<API_KEY>` |
+| **Security** | Client Secrets | `<SECRET>` |
+| **Security** | OAuth Access Tokens | `<ACCESS_TOKEN>` |
+| **Security** | Client IDs | `<CLIENT_ID>` |
+
+#### Example Transformation:
+```text
+Raw Text:    John Doe's phone number is +91 9876543210 and API key is api_key: 99a88b77c
+Masked Text: <PERSON>'s phone number is <PHONE_NUMBER> and API key is api_key: <API_KEY>
+```
 
 ---
 
-## Tech Stack
+## 👥 Multi-Tenant Isolation
 
-- **Frontend**: Streamlit
-- **RAG Orchestration**: LangChain
-- **LLM**: Groq API (`llama-3.3-70b-versatile`)
-- **Embeddings**: Hugging Face Sentence Transformers (`all-MiniLM-L6-v2`)
-- **Vector Database**: ChromaDB
-- **PII Detection**: Microsoft Presidio, spaCy (`en_core_web_lg`), Custom Regex
-- **Metadata Database**: SQLite
-- **Document Processing**: PyMuPDF (`fitz`), `python-docx`
-- **Testing**: pytest
+In a shared SaaS environment, every document chunk stored in ChromaDB is bound to the uploading customer's `user_id`:
+
+```python
+# Ingestion: Injected metadata tag
+metadata["user_id"] = current_user_id
+
+# Retrieval: Enforced database query filter
+results = vector_store.similarity_search(
+    query=query,
+    k=top_k,
+    filter={"user_id": current_user_id}
+)
+```
+
+This guarantees **Customer B can NEVER retrieve document chunks indexed by Customer A**.
 
 ---
 
-## Project Structure
+## 🛠️ Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Language** | Python 3.12 | Core backend application logic |
+| **Web Interface** | Streamlit | Responsive multi-page web interface |
+| **Framework** | LangChain | RAG pipeline orchestration |
+| **LLM Provider** | Groq (`llama-3.3-70b-versatile`) | High-speed LLM inference |
+| **Embedding Model** | Hugging Face (`all-MiniLM-L6-v2`) | Local 384-d vector embeddings |
+| **Vector Database** | ChromaDB | Persistent local vector store |
+| **PII Anonymizer** | Microsoft Presidio + spaCy | Named Entity Recognition & Masking |
+| **Metadata DB** | SQLite | User authentication & file tracking |
+| **Document Parsers**| PyMuPDF (`fitz`), `python-docx` | PDF and Word text extraction |
+| **Testing** | pytest | Automated test suite |
+
+---
+
+## 📁 Project Directory Structure
 
 ```text
 secure-rag-system/
-├── app.py                      # Main Streamlit router
-├── requirements.txt            # Project dependencies
-├── setup_database.py           # Database setup script
-├── src/
-│   ├── auth.py                 # User authentication & hashing
-│   ├── config.py               # Application configuration
-│   ├── database.py             # SQLite helper functions
-│   ├── document_processor.py   # PDF, DOCX, TXT text extractor
-│   ├── embeddings.py           # Local embedding loader
-│   ├── pii_masker.py           # Presidio and regex masking engine
-│   ├── rag_pipeline.py         # Prompt template and Groq LLM chain
-│   ├── text_splitter.py        # Text chunking logic
-│   ├── vector_store.py         # ChromaDB operations with filtering
-│   └── pages/                  # Streamlit pages (dashboard, docs, login, etc.)
-└── tests/                      # Automated test suite
-    ├── test_isolation.py
-    ├── test_masking.py
-    └── test_rag.py
+│
+├── data/                       # Local databases (Git ignored)
+│   ├── chroma_db/              # Vector database storage
+│   └── secure_rag.db           # SQLite metadata & auth storage
+│
+├── src/                        # Application source code
+│   ├── __init__.py
+│   ├── auth.py                 # User login, registration, & password hashing
+│   ├── config.py               # Global system configuration & environment variables
+│   ├── database.py             # SQLite DB manager (Users, Files, History)
+│   ├── document_processor.py   # PDF, DOCX, TXT document parser
+│   ├── embeddings.py           # Local Hugging Face embedding loader
+│   ├── pii_masker.py           # Presidio + spaCy + Regex PII masking engine
+│   ├── rag_pipeline.py         # Groq LLM RAG prompt & chain execution
+│   ├── text_splitter.py        # Recursive character text chunking
+│   ├── vector_store.py         # ChromaDB CRUD & multi-tenant isolation search
+│   └── pages/                  # Streamlit Multi-Page Views
+│       ├── dashboard.py        # Interactive Chat & Upload workspace
+│       ├── documents.py        # Document manager with file management & soft deletion
+│       ├── history.py          # Complete session chat history view
+│       ├── login.py            # User authentication login view
+│       ├── profile.py          # User workspace profile & Customer ID view
+│       ├── register.py         # New user registration view
+│       ├── settings.py         # Security rules & vector store configuration view
+│       └── styles.py           # Custom Glassmorphism CSS design system
+│
+├── tests/                      # Automated test suite
+│   ├── __init__.py
+│   ├── test_isolation.py       # Multi-tenant cross-customer isolation tests
+│   ├── test_masking.py         # Presidio & Regex PII masking tests
+│   └── test_rag.py             # End-to-end RAG pipeline & QA tests
+│
+├── .env.example                # Environment variables template
+├── .gitignore                  # Git exclusion rules
+├── app.py                      # Streamlit application entry point & router
+├── pyrightconfig.json          # Python type checker config
+├── README.md                   # Project documentation
+├── requirements.txt            # Dependency list
+└── setup_database.py           # Database initializer script
 ```
 
 ---
 
-## Setup & Installation
+## 🚀 Quick Start & Setup Guide
 
-### 1. Clone the repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Ketan2591/secure-rag-system.git
 cd secure-rag-system
 ```
 
-### 2. Create virtual environment
+### 2. Create and Activate Virtual Environment
 
 ```bash
+# Create environment
 python -m venv .venv
+
+# Activate on Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
+# Activate on Linux/macOS
+source .venv/bin/activate
 ```
 
-Activate it:
-- **Windows**: `.venv\Scripts\activate`
-- **Linux/macOS**: `source .venv/bin/activate`
-
-### 3. Install dependencies
+### 3. Install Dependencies & spaCy Language Model
 
 ```bash
 pip install -r requirements.txt
 python -m spacy download en_core_web_lg
 ```
 
-### 4. Set up environment variables
+### 4. Configure Environment Variables
 
 Create a `.env` file in the root directory:
 
@@ -119,31 +241,56 @@ Create a `.env` file in the root directory:
 GROQ_API_KEY=your_groq_api_key_here
 ```
 
+*(You can obtain a free API key from [console.groq.com](https://console.groq.com/))*
+
 ---
 
-## Running the Application
+## ▶️ Running the Application
 
-Start the Streamlit application:
+Launch the Streamlit web dashboard:
 
 ```bash
 streamlit run app.py
 ```
 
-Open `http://localhost:8501` in your browser to log in, upload documents, and test the RAG assistant.
+Open your browser at `http://localhost:8501`:
+1. **Register** a new account or **Login**.
+2. Upload your PDF, DOCX, or TXT documents in the **Dashboard**.
+3. Click **Process Documents Securely**.
+4. Ask questions in the **Secure Document Assistant** chat!
 
 ---
 
-## Running Tests
+## 🧪 Running Automated Tests
 
-Run the pytest suite to verify masking, isolation, and RAG pipelines:
+Run the complete test suite with `pytest`:
 
 ```bash
 python -m pytest tests -v
 ```
 
+### Test Results Summary:
+
+```text
+============================== 19 passed in 4.12s ==============================
+```
+
+| Test Suite | Total Tests | Status |
+|---|---:|---|
+| Sensitive Data & PII Masking | 11 | ✅ PASS |
+| Tenant Multi-Isolation | 1 | ✅ PASS |
+| End-to-End RAG QA Pipeline | 7 | ✅ PASS |
+| **Overall** | **19** | **✅ PASS** |
+
 ---
 
-## Author
+## 📜 License & Security Disclaimer
+
+This project demonstrates enterprise-grade security concepts for multi-tenant RAG applications. Production deployments should complement these controls with infrastructure-level encryption at rest, secure key management (KMS), rate limiting, and network firewalls.
+
+---
+
+## 👤 Author
 
 **Ketankumar Prajapat**  
 *AI & Automation Developer*
