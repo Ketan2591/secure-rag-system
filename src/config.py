@@ -23,6 +23,14 @@ if not GROQ_API_KEY:
         GROQ_API_KEY = None
 
 
+# PostgreSQL configuration
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "secure_rag_db")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+
+
 # Vector database configuration
 CHROMA_DB_PATH = BASE_DIR / "data" / "chroma_db"
 COLLECTION_NAME = "secure_documents"

@@ -9,8 +9,9 @@ venv/
 __pycache__/
 *.py[cod]
 
-# Vector database
-data/chroma_db/
+# Vector database and SQLite databases
+data/
+*.db
 
 # Test/cache files
 .pytest_cache/

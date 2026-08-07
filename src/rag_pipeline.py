@@ -92,9 +92,9 @@ PROMPT = ChatPromptTemplate.from_messages(
             "human",
             """
 Document context:
------------------
+
 {context}
------------------
+
 
 User question:
 {question}
@@ -176,6 +176,7 @@ def ingest_document(file, filename: str, user_id: str) -> dict:
         -> user isolation metadata
         -> embeddings
         -> ChromaDB
+        -> PostgreSQL tracking
     """
 
     if not user_id or not user_id.strip():
@@ -183,6 +184,15 @@ def ingest_document(file, filename: str, user_id: str) -> dict:
 
     if file is None:
         raise ValueError("No file was provided.")
+
+    # Get file size if available
+    file_size = 0
+    try:
+        file.seek(0, 2)
+        file_size = file.tell()
+        file.seek(0)
+    except Exception:
+        pass
 
     # Extract text and preserve source/page metadata.
     documents = process_document(
@@ -204,23 +214,40 @@ def ingest_document(file, filename: str, user_id: str) -> dict:
         user_id=user_id,
     )
 
+    pages_processed = len(documents)
+    chunks_stored = len(ids)
+
+    # Persist document metadata in Database
+    try:
+        from src.database import save_document_metadata
+        save_document_metadata(
+            customer_id=user_id,
+            filename=filename,
+            pages_processed=pages_processed,
+            chunks_stored=chunks_stored,
+            file_size_bytes=file_size,
+        )
+    except Exception:
+        pass
+
     return {
         "filename": filename,
-        "pages_processed": len(documents),
+        "pages_processed": pages_processed,
         "chunks_created": len(chunks),
-        "chunks_stored": len(ids),
+        "chunks_stored": chunks_stored,
     }
 
 
-def answer_question(question: str, user_id: str) -> dict:
+def answer_question(question: str, user_id: str, doc_name: str = None) -> dict:
     """
     Run the secure RAG pipeline:
 
     question
-        -> tenant-isolated retrieval
+        -> tenant-isolated retrieval (optional doc_name filter)
         -> protected context
         -> LLM
         -> grounded answer
+        -> PostgreSQL chat history
     """
 
     if not question or not question.strip():
@@ -232,14 +259,25 @@ def answer_question(question: str, user_id: str) -> dict:
     documents = search_documents(
         query=question,
         user_id=user_id,
+        doc_name=doc_name,
     )
 
     if not documents:
+        ans = "The requested information was not found in the uploaded documents."
+        # Save to DB chat history
+        try:
+            from src.database import save_chat_message
+            save_chat_message(
+                customer_id=user_id,
+                user_message=question.strip(),
+                assistant_response=ans,
+                sources=[],
+            )
+        except Exception:
+            pass
+
         return {
-            "answer": (
-                "The requested information was not found "
-                "in the uploaded documents."
-            ),
+            "answer": ans,
             "sources": [],
         }
 
@@ -255,7 +293,22 @@ def answer_question(question: str, user_id: str) -> dict:
         }
     )
 
+    answer_text = response.content.strip()
+    sources_list = get_sources(documents)
+
+    # Save to DB chat history
+    try:
+        from src.database import save_chat_message
+        save_chat_message(
+            customer_id=user_id,
+            user_message=question.strip(),
+            assistant_response=answer_text,
+            sources=sources_list,
+        )
+    except Exception:
+        pass
+
     return {
-        "answer": response.content.strip(),
-        "sources": get_sources(documents),
+        "answer": answer_text,
+        "sources": sources_list,
     }
