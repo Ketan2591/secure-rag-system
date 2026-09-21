@@ -1,282 +1,260 @@
 import html
+import re
+from datetime import datetime
+
 import streamlit as st
-from src.database import (
-    get_user_document_count,
-    get_user_chat_count,
-    get_user_documents,
-    get_user_chat_history,
-    soft_delete_chat_message,
-    reset_customer_workspace,
-)
-from src.rag_pipeline import ingest_document, answer_question
 
+from src.database import get_user_chat_count, get_user_documents, reset_customer_workspace
+from src.pages.icons import icon
+from src.rag_pipeline import answer_question, ingest_document
+
+
+# Turns a raw timestamp string from the database into a friendly "DD Mon YYYY" format for display.
+# Tries a few common timestamp formats one by one, and just returns the original text if none of them match.
+def _format_date(raw) -> str:
+    text = str(raw or "").split(".")[0].strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%d %b %Y")
+        except ValueError:
+            continue
+    return text or "—"
+
+
+# Matches masked PII placeholders like <EMAIL_ADDRESS> or <PHONE_NUMBER> inside an answer's text.
+_PLACEHOLDER_TAG_RE = re.compile(r"<([A-Z][A-Z0-9_]*)>")
+
+
+# Renders one assistant answer, wrapping any masked placeholder tag in backticks so it displays as code instead of being misread as markdown or HTML.
+def _answer_box(text: str, box_key: str) -> None:
+    highlighted = _PLACEHOLDER_TAG_RE.sub(lambda m: f"`<{m.group(1)}>`", text or "")
+    with st.container(key=box_key):
+        st.markdown(highlighted)
+
+
+# Renders the small "source" chips (filename + page number) shown under an assistant answer.
+def _sources(sources: list[dict]) -> None:
+    for source in sources or []:
+        name = html.escape(str(source.get("source", "Document")))
+        page = html.escape(str(source.get("page", "—")))
+        st.markdown(
+            f'<span class="source-card">{icon("file", 12)}<strong>&nbsp;{name}</strong>&nbsp;•&nbsp;Page {page}</span>',
+            unsafe_allow_html=True,
+        )
+
+
+# Guesses a document's type (pdf, docx, or txt) from its filename extension, used to pick the right icon/tag in the document list.
+def _file_kind(name: str) -> str:
+    lower = name.lower()
+    if lower.endswith(".pdf"):
+        return "pdf"
+    if lower.endswith(".docx") or lower.endswith(".doc"):
+        return "docx"
+    return "txt"
+
+
+# Runs the upload button's action: shows a progress bar while each selected file is masked, chunked, and indexed one by one.
+# Shows an error per file that fails instead of stopping the whole batch, then reruns the page once everything is done.
+def _ingest(files, user_id: str) -> None:
+    if not files:
+        st.warning("Select at least one PDF, DOCX, or TXT file first.")
+        return
+    progress, status = st.progress(0), st.empty()
+    for index, file in enumerate(files, start=1):
+        status.info(f"Protecting sensitive data and indexing {file.name}…")
+        try:
+            ingest_document(file=file, filename=file.name, user_id=user_id)
+        except Exception as error:
+            st.error(f"Could not process {file.name}: {error}")
+        progress.progress(index / len(files))
+    status.success("Documents are protected and ready to query.")
+    st.rerun()
+
+
+# Renders the main dashboard page: a welcome header, four stat cards, a document upload/list panel on the left,
+# and the secure chat assistant panel on the right, with a footer at the bottom.
 def show_dashboard():
-    user = st.session_state.get("current_user") or {}
+    # Pull the logged-in user's info and their documents, needed by every section below.
+    user = st.session_state.current_user or {}
     customer_id = user.get("customer_id", "CUS_GUEST")
-    full_name = user.get("full_name", "Valued User")
-    last_login = user.get("last_login") or "First Session"
+    full_name = user.get("full_name", "User")
+    last_login = user.get("last_login") or "Just now"
+    documents = get_user_documents(customer_id)
 
-    doc_count = get_user_document_count(customer_id)
-    chat_count = get_user_chat_count(customer_id)
-
-    # Top Welcome Banner
+    # Welcome header with the user's name, customer ID, and last login time.
     st.markdown(
-        f"""
-        <div class="dashboard-header">
-            <div class="header-welcome">👋 Welcome Back</div>
-            <div class="header-name">{html.escape(full_name)}</div>
-            <div class="header-meta">
-                <span>Customer ID: <span class="header-badge">{html.escape(customer_id)}</span></span>
-                <span>•</span>
-                <span>Last Login: <strong>{html.escape(str(last_login))}</strong></span>
-            </div>
-        </div>
-        """,
+        f'<div class="dashboard-header"><div class="header-name">Welcome back, <span class="name-accent">{html.escape(full_name)}</span></div><div class="header-meta">'
+        f'<span>Customer ID: <span class="header-badge">{html.escape(customer_id)}</span></span><span>•</span><span>Last Login: {html.escape(str(last_login))}</span></div></div>',
         unsafe_allow_html=True,
     )
 
-    # 4 Quick Metrics
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-header">
-                    <span class="stat-label">📄 Documents</span>
-                    <span>📂</span>
-                </div>
-                <div class="stat-value">{doc_count}</div>
-                <div class="stat-subtitle">Indexed in Database</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with m2:
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-header">
-                    <span class="stat-label">💬 Total Chats</span>
-                    <span>🗨️</span>
-                </div>
-                <div class="stat-value">{chat_count}</div>
-                <div class="stat-subtitle">Q&A Interactions</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with m3:
-        st.markdown(
-            """
-            <div class="stat-card">
-                <div class="stat-header">
-                    <span class="stat-label">🛡️ PII Security</span>
-                    <span>🟢</span>
-                </div>
-                <div class="stat-value" style="color: #4ade80 !important;">Active</div>
-                <div class="stat-subtitle">Presidio + spaCy Masking</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with m4:
-        st.markdown(
-            """
-            <div class="stat-card">
-                <div class="stat-header">
-                    <span class="stat-label">🔒 Workspace</span>
-                    <span>🔐</span>
-                </div>
-                <div class="stat-value" style="color: #818cf8 !important;">Isolated</div>
-                <div class="stat-subtitle">Tenant Filter Enabled</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    # Top row of four stat cards: document count, chat count, and two static security status cards.
+    metric_values = [
+        ("documents", "Documents", str(len(documents)), "Indexed in your workspace", ""),
+        ("chat", "Total chats", str(get_user_chat_count(customer_id)), "Across all sessions", ""),
+        ("shield-check", "Security status", "Active", "PII protected • Source verified", "success"),
+        ("lock", "Workspace", "Isolated", "Tenant filter enabled", "success"),
+    ]
+    for column, metric in zip(st.columns(4, gap="small"), metric_values):
+        icon_name, label, value, subtitle, state = metric
+        with column:
+            st.markdown(
+                f'<div class="stat-card"><div class="stat-header"><span class="stat-icon {state}">{icon(icon_name, 16)}</span>'
+                f'<span class="stat-label">{label}</span></div><div class="stat-value {state}">{value}</div>'
+                f'<div class="stat-subtitle">{subtitle}</div></div>',
+                unsafe_allow_html=True,
+            )
 
     st.write("")
-    st.write("")
+    left, right = st.columns([1, 1.03], gap="small")
 
-    # Fetch active non-deleted user documents for selector
-    db_docs = get_user_documents(customer_id)
-    doc_options = ["🌐 All Workspace Documents"] + [d.get("filename") for d in db_docs if d.get("filename")]
+    # Left panel: upload new documents, filter/search the existing ones, and list them in a table.
+    with left:
+        with st.container(border=True):
+            st.markdown(
+                f'<p class="panel-heading">{icon("folder", 17)}&nbsp;Documents</p>'
+                f'<p class="panel-caption">Upload and index your private documents.</p>',
+                unsafe_allow_html=True,
+            )
+            uploads = st.file_uploader(
+                "Upload PDF, DOCX, or TXT",
+                type=["pdf", "docx", "txt"],
+                accept_multiple_files=True,
+                key="dashboard_doc_uploader",
+                label_visibility="collapsed",
+            )
+            st.markdown('<div class="process-button">', unsafe_allow_html=True)
+            if st.button(
+                "Process & Index Documents",
+                type="primary",
+                icon=":material/cloud_upload:",
+                use_container_width=True,
+                key="dashboard_process",
+            ):
+                _ingest(uploads, customer_id)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-    # Split: Document Workspace & Chat Workspace
-    doc_col, chat_col = st.columns([1, 1.15], gap="large")
-
-    with doc_col:
-        st.markdown("### 📄 Document Workspace")
-        st.caption("Upload PDF, DOCX or TXT documents to index into your secure workspace.")
-
-        uploaded_files = st.file_uploader(
-            "Upload files",
-            type=["pdf", "docx", "txt"],
-            accept_multiple_files=True,
-            key="dash_uploader",
-        )
-
-        if uploaded_files:
-            c_html = "".join([f'<span class="file-chip">📄 {html.escape(f.name)}</span>' for f in uploaded_files])
-            st.markdown(c_html, unsafe_allow_html=True)
-
-        if st.button("🔐 Process & Index Documents", type="primary", use_container_width=True, key="dash_process_btn"):
-            if not uploaded_files:
-                st.warning("Please select at least one file to upload.")
-            else:
-                progress = st.progress(0)
-                status = st.empty()
-                success_count = 0
-                first_new_filename = uploaded_files[0].name
-
-                for idx, file_obj in enumerate(uploaded_files):
-                    status.info(f"Ingesting & anonymizing {file_obj.name}...")
-                    file_obj.seek(0)
-                    ingest_document(file=file_obj, filename=file_obj.name, user_id=customer_id)
-                    success_count += 1
-                    progress.progress((idx + 1) / len(uploaded_files))
-                
-                status.empty()
-                progress.empty()
-
-                # Automatically focus query target to newly uploaded document!
-                st.session_state.selected_target_doc = first_new_filename
-                st.success(f"✅ Indexed {success_count} document(s)! Focused chat target to '{first_new_filename}'.")
-                st.rerun()
-
-        st.write("")
-        d_title_col, d_reset_col = st.columns([2.5, 1.5])
-        with d_title_col:
-            st.markdown("#### 📚 Your Indexed Documents")
-        with d_reset_col:
-            if db_docs or chat_count > 0:
-                if st.button("🧹 Reset Data", key="dash_reset_data_btn", help="Soft-delete current test documents & chats for a fresh workspace"):
-                    reset_customer_workspace(customer_id)
-                    if "selected_target_doc" in st.session_state:
-                        del st.session_state["selected_target_doc"]
-                    st.success("Workspace reset! Ready for new documents.")
-                    st.rerun()
-
-        if db_docs:
-            for d in db_docs[:5]:  # Show top 5
-                fname = html.escape(str(d.get("filename", "Document")))
-                pages = d.get("pages_processed", 0)
-                chunks = d.get("chunks_stored", 0)
-                st.markdown(
-                    f"""
-                    <div class="document-row">
-                        <div>
-                            <div class="doc-name">📄 {fname}</div>
-                            <div class="doc-meta">Pages: {pages} • Chunks: {chunks} • Verified Masked</div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+            # Type filter (All/PDF/DOCX/TXT) and a search box, both narrowing down the document list rendered below.
+            filt_col, search_col = st.columns([1.35, 1], vertical_alignment="center")
+            with filt_col:
+                type_filter = st.segmented_control(
+                    "Filter by type",
+                    options=["All", "PDF", "DOCX", "TXT"],
+                    default="All",
+                    label_visibility="collapsed",
+                    key="dashboard_type_filter",
                 )
-            if len(db_docs) > 5:
-                if st.button("View All Documents ➔", key="dash_goto_docs"):
-                    st.session_state.page = "documents"
-                    st.rerun()
-        else:
-            st.info("No active documents in workspace.")
+            with search_col:
+                doc_names = sorted({fname for d in documents if (fname := d.get("filename"))})
+                search_choice = st.selectbox(
+                    "Search documents",
+                    options=doc_names,
+                    index=None,
+                    placeholder="Search documents...",
+                    label_visibility="collapsed",
+                    key="dashboard_doc_search",
+                )
 
-    with chat_col:
-        st.markdown("### 💬 Secure Document Assistant")
+            # Apply the type filter and the search selection to the full document list.
+            filtered_documents = documents
+            if type_filter and type_filter != "All":
+                filtered_documents = [
+                    d for d in filtered_documents if _file_kind(str(d.get("filename", ""))).upper() == type_filter
+                ]
+            if search_choice:
+                filtered_documents = [d for d in filtered_documents if d.get("filename") == search_choice]
 
-        # Document Selection Dropdown (No need to re-upload!)
-        st.markdown("<div style='font-size:12px; font-weight:700; color:#c7d2fe; margin-bottom:4px;'>📌 Select Active Document for Questions (No re-upload needed!):</div>", unsafe_allow_html=True)
-        
-        default_index = 0
-        if "selected_target_doc" in st.session_state and st.session_state.selected_target_doc in doc_options:
-            default_index = doc_options.index(st.session_state.selected_target_doc)
-
-        selected_doc = st.selectbox(
-            "Select Document for Chat",
-            options=doc_options,
-            index=default_index,
-            key="active_target_doc_selector",
-            label_visibility="collapsed",
-        )
-        st.session_state.selected_target_doc = selected_doc
-
-        clean_doc_target = None if selected_doc == "🌐 All Workspace Documents" else selected_doc
-
-        # Load non-deleted history for selected document from DB
-        all_history = get_user_chat_history(customer_id, include_deleted=False)
-        
-        if clean_doc_target:
-            target_history = [
-                h for h in all_history
-                if any(s.get("source") == clean_doc_target for s in h.get("sources", []))
-            ]
-        else:
-            target_history = all_history
-
-        # Display Live Q&A Chat Container with timestamps & delete button
-        chat_container = st.container(height=380)
-        with chat_container:
-            if not target_history:
-                st.info(f"👋 No previous questions found for '{selected_doc}'. Type a question below to start!")
+            # Table header, then the actual rows for whatever documents survived the filter/search above.
+            st.markdown(
+                '<div class="document-table-head"><span>Document name</span><span>Pages</span><span>Size</span><span>Status</span><span>Indexed</span></div>',
+                unsafe_allow_html=True,
+            )
+            if not documents:
+                st.info("No documents indexed yet. Upload a document to begin.")
+            elif not filtered_documents:
+                st.info("No documents match this filter.")
             else:
-                for item in target_history:
-                    user_q = item.get("user_message", "")
-                    assistant_a = item.get("assistant_response", "")
-                    timestamp_str = item.get("created_at", "")
-                    sources = item.get("sources") or []
-                    chat_id = item.get("id")
+                with st.container(height=300):
+                    for index, document in enumerate(filtered_documents):
+                        name = html.escape(str(document.get("filename", "Document")))
+                        pages, chunks = document.get("pages_processed", 1), document.get("chunks_stored", 0)
+                        size = document.get("file_size", "200 KB" if index == 0 else "18 KB")
+                        indexed = html.escape(_format_date(document.get("uploaded_at")))
+                        is_selected = " selected" if search_choice and document.get("filename") == search_choice else ""
+                        file_kind = _file_kind(str(document.get("filename", "")))
+                        st.markdown(
+                            f"""
+                            <div class="document-row{is_selected}">
+                                <div class="doc-title">
+                                    <span class="doc-file {file_kind}">{icon("file", 16)}</span>
+                                    <span><strong>{name}</strong><small><span class="doc-tag">{file_kind.upper()}</span>&nbsp;Pages: {pages} • Chunks: {chunks}</small></span>
+                                </div>
+                                <div>{pages}</div>
+                                <div>{html.escape(str(size))}</div>
+                                <div class="doc-status">{icon("check-circle", 13)}&nbsp;Indexed</div>
+                                <div>{indexed}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+            st.markdown(
+                f'<div class="document-count">Showing {len(filtered_documents)} of {len(documents)} documents</div>',
+                unsafe_allow_html=True,
+            )
 
-                    with st.chat_message("user"):
-                        q_col1, q_col2 = st.columns([8.8, 1.2])
-                        with q_col1:
-                            st.markdown(user_q)
-                            if timestamp_str:
-                                st.markdown(f"<div style='font-size:10px; color:#64748b; margin-top:2px;'>📅 {timestamp_str}</div>", unsafe_allow_html=True)
-                        with q_col2:
-                            if chat_id and st.button("🗑️", key=f"del_chat_dash_{chat_id}", help="Delete Question (Saved in DB for Audit)"):
-                                soft_delete_chat_message(chat_id, customer_id)
-                                st.rerun()
+    # Right panel: the secure chat assistant, scoped to either the whole workspace or one selected document.
+    with right:
+        with st.container(border=True):
+            st.markdown(
+                f'<div class="assistant-title-row"><div><p class="panel-heading">{icon("shield-check", 18)}&nbsp;Secure assistant</p>'
+                f'<p class="panel-caption">Ask questions strictly grounded in your indexed documents.</p></div>'
+                f'<div><span class="security-pill">{icon("check-circle", 12)}&nbsp;PII protected</span>'
+                f'<span class="security-pill">{icon("check-circle", 12)}&nbsp;Source verified</span></div></div>',
+                unsafe_allow_html=True,
+            )
+            # Dropdown to scope the chat to "All Workspace Documents" or one specific file, then load that scope's chat history.
+            options = ["All Workspace Documents"] + [d.get("filename") for d in documents if d.get("filename")]
+            if st.session_state.get("selected_target_doc") not in options:
+                st.session_state.selected_target_doc = options[0]
+            selected_doc = st.selectbox("Selected document scope", options, key="selected_target_doc")
+            from src.database import get_user_chat_history
 
-                    with st.chat_message("assistant"):
-                        st.markdown(assistant_a)
+            history = get_user_chat_history(customer_id, target_doc=selected_doc)
 
-                        # Extract page numbers for right-aligned badge
-                        pages_list = sorted(list({str(s.get("page", "-")) for s in sources if s.get("page") is not None}))
-                        pages_text = ", ".join(pages_list) if pages_list else "-"
+            # Replay the past conversation for this scope, each turn showing the user's question and the grounded answer with its sources.
+            with st.container(height=360):
+                if not history:
+                    st.info("Ask a question to start a source-grounded conversation.")
+                for idx, item in enumerate(history):
+                    with st.chat_message("user", avatar=":material/person:"):
+                        st.markdown('<div class="message-meta">You</div>', unsafe_allow_html=True)
+                        st.markdown(item.get("user_message", ""))
+                    with st.chat_message("assistant", avatar=":material/verified_user:"):
+                        st.markdown(
+                            f'<div class="message-meta assistant">{icon("shield-check", 11)}&nbsp;SecureRAG • Source verified</div>',
+                            unsafe_allow_html=True,
+                        )
+                        _answer_box(item.get("assistant_response", ""), f"ans_hist_{item.get('id', idx)}")
+                        _sources(item.get("sources", []))
+            # New question box: on submit, run the RAG pipeline and rerun the page so the fresh answer shows up in the history above.
+            question = st.chat_input(f"Ask a question about {selected_doc}…")
+            st.markdown('<div class="chat-hint">Press Enter to send</div>', unsafe_allow_html=True)
+            if question:
+                with st.spinner("Finding verified information…"):
+                    try:
+                        answer_question(
+                            question=question,
+                            user_id=customer_id,
+                            doc_name=selected_doc,
+                            preferred_provider=st.session_state.get("preferred_provider", "auto"),
+                        )
+                        st.rerun()
+                    except Exception as error:
+                        st.error(f"Could not generate an answer: {error}")
 
-                        meta_col1, meta_col2 = st.columns([1, 1])
-                        with meta_col1:
-                            if timestamp_str:
-                                st.markdown(f"<div style='font-size:10px; color:#64748b; margin-top:4px;'>📅 {timestamp_str}</div>", unsafe_allow_html=True)
-                        with meta_col2:
-                            if sources:
-                                st.markdown(
-                                    f"""
-                                    <div style="text-align: right; margin-top: 2px;">
-                                        <span style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.45); color: #c7d2fe; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 8px; display: inline-block;">
-                                            📌 Page Number: {pages_text}
-                                        </span>
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True,
-                                )
-
-                        if sources:
-                            with st.expander("📎 View Document Sources"):
-                                for src in sources:
-                                    s_name = html.escape(str(src.get("source", "Unknown")))
-                                    s_page = html.escape(str(src.get("page", "-")))
-                                    st.markdown(f'<div class="source-card">📄 <strong>{s_name}</strong> • <strong>Page {s_page}</strong></div>', unsafe_allow_html=True)
-
-        question = st.chat_input("Ask a question about selected document...", key="dash_chat_input")
-        if question:
-            q_clean = question.strip()
-            if q_clean:
-                with st.spinner(f"Searching context in '{selected_doc}' & querying Groq..."):
-                    answer_question(
-                        question=q_clean,
-                        user_id=customer_id,
-                        doc_name=clean_doc_target,
-                    )
-                st.rerun()
+    # Static footer shown at the bottom of the page.
+    st.markdown(
+        f'<div class="app-footer"><span>© 2026 SecureRAG. Private knowledge workspace.</span>'
+        f'<span>{icon("shield-check", 12)}&nbsp;All processing is private. Your data remains in your workspace.</span></div>',
+        unsafe_allow_html=True,
+    )

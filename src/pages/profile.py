@@ -2,8 +2,13 @@ import html
 import streamlit as st
 from src.database import update_user_profile, update_user_password
 from src.auth import hash_password, verify_password
+from src.pages.icons import icon
 
+
+# Renders the "My Profile" page: an account details card with a display-name form on the left,
+# and a change-password form on the right.
 def show_profile():
+    # Pull the logged-in user's details out of session state for display and as defaults in the forms below.
     user = st.session_state.get("current_user") or {}
     user_id = user.get("id")
     customer_id = user.get("customer_id", "CUS_GUEST")
@@ -13,45 +18,42 @@ def show_profile():
     created_at = user.get("created_at", "N/A")
     last_login = user.get("last_login", "N/A")
 
-    st.markdown("## 👤 User Profile")
-    st.caption("Manage your account information, Customer ID details, and credentials.")
+    st.markdown(
+        f'<div class="page-header"><div class="icon-badge">{icon("user", 19)}</div>'
+        f'<div class="page-header-text"><div class="page-title">User Profile</div>'
+        f'<div class="page-caption">Manage your account information, Customer ID details, and credentials.</div></div></div>',
+        unsafe_allow_html=True,
+    )
 
     st.write("")
 
     col1, col2 = st.columns([1.2, 1], gap="large")
 
+    # Left column: a read-only card showing account details, plus a form to change the display name.
     with col1:
-        st.markdown("### 📋 Account Details")
+        st.markdown(f'<div class="section-heading">{icon("documents", 16)}Account Details</div>', unsafe_allow_html=True)
         st.markdown(
             f"""
-            <div class="stat-card" style="margin-bottom: 20px;">
-                <div style="font-size: 18px; font-weight: 800; color: #ffffff; margin-bottom: 12px;">
-                    {html.escape(full_name)}
+            <div class="info-card" style="margin-bottom: 20px;">
+                <div style="display:flex;align-items:center;gap:.65rem;margin-bottom:.9rem">
+                    <div class="avatar">{html.escape((full_name.strip()[:1] or "U").upper())}</div>
+                    <div style="font-size: 1.05rem; font-weight: 800; color: var(--text);">{html.escape(full_name)}</div>
                 </div>
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 6px;">
-                    📧 Email: <strong style="color: #f8fafc;">{html.escape(email)}</strong>
-                </div>
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 6px;">
-                    🔑 Customer ID: <span class="header-badge">{html.escape(customer_id)}</span>
-                </div>
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 6px;">
-                    🟢 Account Status: <strong style="color: #4ade80;">Active</strong>
-                </div>
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 6px;">
-                    📅 Member Since: <strong style="color: #cbd5e1;">{html.escape(str(created_at))}</strong>
-                </div>
-                <div style="font-size: 13px; color: #94a3b8;">
-                    🕒 Last Login: <strong style="color: #cbd5e1;">{html.escape(str(last_login))}</strong>
-                </div>
+                <div class="info-row">{icon("mail", 14)}Email:&nbsp;<strong>{html.escape(email)}</strong></div>
+                <div class="info-row">{icon("key", 14)}Customer ID:&nbsp;<span class="header-badge">{html.escape(customer_id)}</span></div>
+                <div class="info-row">{icon("check-circle", 14)}Account Status:&nbsp;<strong style="color:var(--success)">Active</strong></div>
+                <div class="info-row">{icon("clock", 14)}Member Since:&nbsp;<strong>{html.escape(str(created_at))}</strong></div>
+                <div class="info-row">{icon("clock", 14)}Last Login:&nbsp;<strong>{html.escape(str(last_login))}</strong></div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
+        # On submit: save the new name to the database and update session state so the new name shows up immediately.
         with st.form("edit_name_form"):
             st.markdown("#### Edit Display Name")
             new_name = st.text_input("Full Name", value=full_name)
-            submit_name = st.form_submit_button("Update Name", type="primary")
+            submit_name = st.form_submit_button("Update Name", type="primary", icon=":material/save:")
 
             if submit_name:
                 clean_n = new_name.strip()
@@ -63,15 +65,17 @@ def show_profile():
                     st.success("Profile updated successfully!")
                     st.rerun()
 
+    # Right column: change-password form, checking the current password before accepting a new one.
     with col2:
-        st.markdown("### 🔒 Security & Password")
+        st.markdown(f'<div class="section-heading">{icon("lock", 16)}Security &amp; Password</div>', unsafe_allow_html=True)
         with st.form("change_password_form"):
             st.markdown("#### Change Password")
             old_pass = st.text_input("Current Password", type="password")
             new_pass = st.text_input("New Password (Min 8 chars)", type="password")
             confirm_pass = st.text_input("Confirm New Password", type="password")
-            submit_pass = st.form_submit_button("Update Password", type="primary")
+            submit_pass = st.form_submit_button("Update Password", type="primary", icon=":material/lock_reset:")
 
+            # Validate in order: all fields filled, current password correct, new password long enough, and the two new entries match.
             if submit_pass:
                 if not old_pass or not new_pass or not confirm_pass:
                     st.warning("Please fill in all password fields.")
@@ -82,6 +86,7 @@ def show_profile():
                 elif new_pass != confirm_pass:
                     st.error("New passwords do not match.")
                 else:
+                    # All checks passed: hash the new password and save it, then update session state to match.
                     new_hash = hash_password(new_pass)
                     update_user_password(user_id, new_hash)
                     st.session_state.current_user["password_hash"] = new_hash

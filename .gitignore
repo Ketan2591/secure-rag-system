@@ -21,3 +21,10 @@ data/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Claude Code local session/config folder
+.claude/
+
+# Type-checker configs with machine-specific absolute paths baked in
+pyrightconfig.json
+.pyrefly.json

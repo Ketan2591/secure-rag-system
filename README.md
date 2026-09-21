@@ -1,6 +1,6 @@
 # 🔐 SecureRAG System
 
-SecureRAG is a production-grade, multi-tenant **Retrieval-Augmented Generation (RAG)** application built with Python, Streamlit, LangChain, ChromaDB, and Groq.
+SecureRAG is a production-grade, multi-tenant **Retrieval-Augmented Generation (RAG)** application built with Python, Streamlit, LangChain, and a dynamically-selected stack of LLM, vector store, and database providers.
 
 It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perform source-grounded question answering while strictly safeguarding sensitive personal data (PII) and maintaining multi-tenant workspace isolation.
 
@@ -9,15 +9,16 @@ It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perfor
 ## ✨ Key Features & Architecture Highlights
 
 - 🛡️ **Pre-Embedding PII & Secrets Masking**: Automatically detects and replaces sensitive information (SSN, Phone, Email, Passwords, API Keys, Credit Cards, Aadhaar, PAN, Bank Accounts) with protected placeholders *before* vector embeddings are generated or stored.
-- 👥 **Strict Multi-Tenant Workspace Isolation**: Assigns a unique `Customer ID` metadata tag to every vector chunk. ChromaDB queries use mandatory `filter={"user_id": customer_id}` to prevent cross-tenant data leakage.
+- 👥 **Strict Multi-Tenant Workspace Isolation**: Assigns a unique `Customer ID` metadata tag to every vector chunk. Vector store queries use a mandatory `filter={"user_id": customer_id}` to prevent cross-tenant data leakage.
 - 🧠 **Local Embedding Engine**: Generates 384-dimensional vector embeddings locally using Hugging Face (`all-MiniLM-L6-v2`), ensuring unmasked document content never leaves the secure local server.
-- 🤖 **Lightning-Fast LLM Inference**: Integrated with **Groq API** running `llama-3.3-70b-versatile` for ultra-fast, source-grounded answers (~500+ tokens/sec).
+- 🤖 **Multi-Provider LLM Failover**: Dynamically routes questions through **Groq** (`openai/gpt-oss-120b`) as the primary model, with automatic failover to **Google Gemini** (`gemini-2.5-flash`) and backup Groq models if a provider rate-limits or is unavailable.
+- 🗂️ **Dual Vector Store Backend**: Uses **Pinecone** (cloud) when an API key is configured, and transparently falls back to a local **ChromaDB** store otherwise — no setup required for local development.
 - 📚 **Source & Page Attribution**: Every answer includes clickable references displaying the exact source filename and page numbers used for generation.
 - 🔐 **Placeholder Preservation**: Instructs the LLM never to guess, decode, or reveal raw sensitive values behind protected placeholders like `<PHONE_NUMBER>` or `<API_KEY>`.
 - 🛡️ **Indirect Prompt Injection Defense**: Treats retrieved document chunks strictly as read-only data, ignoring embedded commands or prompt override attempts inside documents.
-- 🎨 **Enterprise Multi-Page Dark Theme UI**: Built with Streamlit featuring a Glassmorphism CSS design system, user authentication, interactive dashboard, document manager, chat history, profile, and system settings.
-- 🗄️ **Database Tracking & Soft Deletion**: Integrated SQLite tracking database (`secure_rag.db`) supporting file management, soft deletion, and vector store cleanup safeguards.
-- 🧪 **Automated Test Suite**: 19 automated unit & integration tests covering PII masking, multi-tenant isolation, and RAG QA pipelines.
+- 🎨 **Enterprise Multi-Page UI with Light/Dark Theme**: Built with Streamlit featuring a custom CSS design system, user authentication, interactive dashboard, document manager, chat history, profile, and system settings.
+- 🗄️ **Dual Database Backend & Soft Deletion**: Uses **PostgreSQL** when configured, falling back to a local **SQLite** database (`secure_rag.db`) automatically — supporting file management, soft deletion, and vector store cleanup safeguards.
+- 🧪 **Automated Test Suite**: 20 automated unit & integration tests covering PII masking, multi-tenant isolation, and RAG QA pipelines.
 
 ---
 
@@ -45,7 +46,7 @@ It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perfor
                                              ▼
                                ┌───────────────────────────┐
                                │       Text Chunking       │
-                               │(LangChain 500-char/50-ov) │
+                               │(LangChain 1000-char/150-ov)│
                                └─────────────┬─────────────┘
                                              │
                                              ▼
@@ -56,7 +57,7 @@ It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perfor
                                              │
                                              ▼
                                ┌───────────────────────────┐
-                               │      Chroma Vector DB     │
+                               │ Pinecone / Chroma Vector DB│
                                │  + user_id Metadata Tag   │
                                └─────────────┬─────────────┘
                                              │
@@ -74,7 +75,8 @@ It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perfor
                                              │
                                              ▼
                                ┌───────────────────────────┐
-                               │    Groq Llama-3.3 LLM     │
+                               │  Groq / Gemini LLM        │
+                               │  (Dynamic Failover)       │
                                │    Source-Grounded QA     │
                                └─────────────┬─────────────┘
                                              │
@@ -122,7 +124,7 @@ Masked Text: <PERSON>'s phone number is <PHONE_NUMBER> and API key is api_key: <
 
 ## 👥 Multi-Tenant Isolation
 
-In a shared SaaS environment, every document chunk stored in ChromaDB is bound to the uploading customer's `user_id`:
+In a shared SaaS environment, every document chunk stored in the vector database is bound to the uploading customer's `user_id`:
 
 ```python
 # Ingestion: Injected metadata tag
@@ -147,11 +149,11 @@ This guarantees **Customer B can NEVER retrieve document chunks indexed by Custo
 | **Language** | Python 3.12 | Core backend application logic |
 | **Web Interface** | Streamlit | Responsive multi-page web interface |
 | **Framework** | LangChain | RAG pipeline orchestration |
-| **LLM Provider** | Groq (`llama-3.3-70b-versatile`) | High-speed LLM inference |
+| **LLM Provider** | Groq (`gpt-oss-120b`) + Google Gemini (`gemini-2.5-flash`) | High-speed LLM inference with automatic failover |
 | **Embedding Model** | Hugging Face (`all-MiniLM-L6-v2`) | Local 384-d vector embeddings |
-| **Vector Database** | ChromaDB | Persistent local vector store |
+| **Vector Database** | Pinecone (cloud) with local ChromaDB fallback | Persistent, multi-tenant vector store |
 | **PII Anonymizer** | Microsoft Presidio + spaCy | Named Entity Recognition & Masking |
-| **Metadata DB** | SQLite | User authentication & file tracking |
+| **Metadata DB** | PostgreSQL with local SQLite fallback | User authentication & file tracking |
 | **Document Parsers**| PyMuPDF (`fitz`), `python-docx` | PDF and Word text extraction |
 | **Testing** | pytest | Automated test suite |
 
@@ -162,30 +164,37 @@ This guarantees **Customer B can NEVER retrieve document chunks indexed by Custo
 ```text
 secure-rag-system/
 │
-├── data/                       # Local databases (Git ignored)
-│   ├── chroma_db/              # Vector database storage
-│   └── secure_rag.db           # SQLite metadata & auth storage
+├── data/                       # Local databases (Git ignored, used when Pinecone/PostgreSQL aren't configured)
+│   ├── chroma_db/              # Local ChromaDB vector store fallback
+│   └── secure_rag.db           # Local SQLite metadata & auth storage fallback
 │
 ├── src/                        # Application source code
 │   ├── __init__.py
+│   ├── assets/                 # Static assets (favicon, etc.)
 │   ├── auth.py                 # User login, registration, & password hashing
 │   ├── config.py               # Global system configuration & environment variables
-│   ├── database.py             # SQLite DB manager (Users, Files, History)
+│   ├── database.py             # PostgreSQL/SQLite DB manager (Users, Files, History)
 │   ├── document_processor.py   # PDF, DOCX, TXT document parser
 │   ├── embeddings.py           # Local Hugging Face embedding loader
 │   ├── pii_masker.py           # Presidio + spaCy + Regex PII masking engine
-│   ├── rag_pipeline.py         # Groq LLM RAG prompt & chain execution
+│   ├── rag_pipeline.py         # Multi-provider LLM RAG orchestration & failover
 │   ├── text_splitter.py        # Recursive character text chunking
-│   ├── vector_store.py         # ChromaDB CRUD & multi-tenant isolation search
+│   ├── vector_store.py         # Pinecone/ChromaDB CRUD & multi-tenant isolation search
 │   └── pages/                  # Streamlit Multi-Page Views
 │       ├── dashboard.py        # Interactive Chat & Upload workspace
 │       ├── documents.py        # Document manager with file management & soft deletion
 │       ├── history.py          # Complete session chat history view
+│       ├── icons.py            # Inline SVG icon set used across the UI
 │       ├── login.py            # User authentication login view
 │       ├── profile.py          # User workspace profile & Customer ID view
 │       ├── register.py         # New user registration view
 │       ├── settings.py         # Security rules & vector store configuration view
-│       └── styles.py           # Custom Glassmorphism CSS design system
+│       └── styles.py           # Custom CSS design system (light/dark theme)
+│
+├── scripts/                    # Standalone maintenance & debugging scripts
+│   ├── diagnose_retrieval.py   # Inspect DB documents & test sample retrieval queries
+│   ├── force_reindex.py        # Delete and re-ingest a single document for a customer
+│   └── inspect_user_vectors.py # Inspect a customer's raw vectors in the vector store
 │
 ├── tests/                      # Automated test suite
 │   ├── __init__.py
@@ -196,10 +205,10 @@ secure-rag-system/
 ├── .env.example                # Environment variables template
 ├── .gitignore                  # Git exclusion rules
 ├── app.py                      # Streamlit application entry point & router
+├── LICENSE                     # MIT License
 ├── pyrightconfig.json          # Python type checker config
 ├── README.md                   # Project documentation
-├── requirements.txt            # Dependency list
-└── setup_database.py           # Database initializer script
+└── requirements.txt            # Dependency list
 ```
 
 ---
@@ -235,13 +244,28 @@ python -m spacy download en_core_web_lg
 
 ### 4. Configure Environment Variables
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory. Only `GROQ_API_KEY` is required to get started — everything else is optional and falls back automatically:
 
 ```env
+# Required: at least one LLM provider key
 GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=openai/gpt-oss-120b
+
+# Optional: Gemini fallback LLM
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional: Pinecone (falls back to local ChromaDB if not set)
+PINECONE_API_KEY=your_pinecone_api_key_here
+
+# Optional: PostgreSQL (falls back to local SQLite if not set)
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=secure_rag_db
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_password
 ```
 
-*(You can obtain a free API key from [console.groq.com](https://console.groq.com/))*
+*(You can obtain a free Groq API key from [console.groq.com](https://console.groq.com/) and a free Gemini API key from [aistudio.google.com](https://aistudio.google.com/))*
 
 ---
 
@@ -256,8 +280,8 @@ streamlit run app.py
 Open your browser at `http://localhost:8501`:
 1. **Register** a new account or **Login**.
 2. Upload your PDF, DOCX, or TXT documents in the **Dashboard**.
-3. Click **Process Documents Securely**.
-4. Ask questions in the **Secure Document Assistant** chat!
+3. Click **Process & Index Documents**.
+4. Ask questions in the **Secure Assistant** chat!
 
 ---
 
@@ -272,21 +296,23 @@ python -m pytest tests -v
 ### Test Results Summary:
 
 ```text
- 19 passed.
+ 20 passed.
 ```
 
 | Test Suite | Total Tests | Status |
 |---|---:|---|
 | Sensitive Data & PII Masking | 11 | ✅ PASS |
 | Tenant Multi-Isolation | 1 | ✅ PASS |
-| End-to-End RAG QA Pipeline | 7 | ✅ PASS |
-| **Overall** | **19** | **✅ PASS** |
+| End-to-End RAG QA Pipeline | 8 | ✅ PASS |
+| **Overall** | **20** | **✅ PASS** |
 
 ---
 
 ## 📜 License & Security Disclaimer
 
-This project demonstrates enterprise-grade security concepts for multi-tenant RAG applications. Production deployments should complement these controls with infrastructure-level encryption at rest, secure key management (KMS), rate limiting, and network firewalls.
+This project is licensed under the [MIT License](LICENSE) — free to use, modify, and distribute.
+
+It demonstrates enterprise-grade security concepts for multi-tenant RAG applications. Production deployments should complement these controls with infrastructure-level encryption at rest, secure key management (KMS), rate limiting, and network firewalls.
 
 ---
 

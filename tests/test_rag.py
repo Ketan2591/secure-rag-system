@@ -11,28 +11,13 @@ from src.rag_pipeline import (
 )
 
 
+# Builds a fresh, random customer ID for each test run so leftover data from a previous test run in ChromaDB never affects the result.
 def unique_user(prefix: str) -> str:
-    """
-    Create a unique customer ID for each test run so old
-    persistent ChromaDB data cannot affect the result.
-    """
     return f"{prefix}_{uuid.uuid4().hex}"
 
 
+# Runs the full RAG flow end to end on a real TXT document: ingest, chunk, store, retrieve, ask the LLM, and check the answer and its source citation.
 def test_complete_rag_pipeline():
-    """
-    Verify the complete end-to-end RAG flow:
-
-    TXT document
-        -> ingestion
-        -> chunking
-        -> vector storage
-        -> retrieval
-        -> Groq LLM
-        -> grounded answer
-        -> source citation
-    """
-
     user_id = unique_user("pytest_rag")
 
     document_text = (
@@ -79,12 +64,8 @@ def test_complete_rag_pipeline():
     )
 
 
+# Checks that a brand new customer with no uploaded documents gets the standard "not found" answer instead of leaking another customer's data.
 def test_unknown_customer_returns_no_documents():
-    """
-    A customer with no indexed documents must not receive
-    information from another customer's workspace.
-    """
-
     user_id = unique_user("pytest_empty_customer")
 
     result = answer_question(
@@ -100,11 +81,8 @@ def test_unknown_customer_returns_no_documents():
     assert result["sources"] == []
 
 
+# Checks that a blank/whitespace-only question raises a ValueError immediately, before any retrieval or LLM call happens.
 def test_empty_question_is_rejected():
-    """
-    Empty questions should fail before retrieval/LLM execution.
-    """
-
     with pytest.raises(
         ValueError,
         match="Question cannot be empty",
@@ -115,11 +93,8 @@ def test_empty_question_is_rejected():
         )
 
 
+# Checks that asking a question with an empty user_id raises a ValueError, since every query must belong to some customer's workspace.
 def test_missing_user_id_is_rejected():
-    """
-    RAG queries must always belong to a customer workspace.
-    """
-
     with pytest.raises(
         ValueError,
         match="user_id is required",
@@ -130,11 +105,8 @@ def test_missing_user_id_is_rejected():
         )
 
 
+# Checks that uploading a document with an empty user_id raises a ValueError, since a document must never be stored without an owner.
 def test_ingestion_without_user_id_is_rejected():
-    """
-    Documents must never be stored without tenant ownership.
-    """
-
     file = BytesIO(
         b"This document should never be stored."
     )
@@ -150,12 +122,8 @@ def test_ingestion_without_user_id_is_rejected():
         )
 
 
+# Checks that when several chunks come from the same file and page, get_sources collapses them into a single source entry instead of duplicates.
 def test_source_deduplication():
-    """
-    Duplicate retrieved chunks from the same source/page
-    should produce only one source reference.
-    """
-
     from langchain_core.documents import Document
 
     documents = [
@@ -197,12 +165,8 @@ def test_source_deduplication():
     } in sources
 
 
+# Checks that format_context includes the source filename, page number, and the actual chunk text in the string sent to the LLM.
 def test_context_contains_source_and_content():
-    """
-    Retrieved chunks should be formatted with source/page
-    metadata before being sent to the LLM.
-    """
-
     from langchain_core.documents import Document
 
     documents = [
@@ -220,3 +184,31 @@ def test_context_contains_source_and_content():
     assert "employee_policy.txt" in context
     assert "Page: 1" in context
     assert "Annual leave is 27 days." in context
+
+
+# Uploads two documents with different codenames and checks that passing doc_name to answer_question strictly returns that document's own answer, not the other one's.
+def test_doc_name_filtering():
+    user_id = unique_user("pytest_doc_name_filter")
+
+    file_a = BytesIO(b"Alpha document project codename is RedDragon.")
+    file_b = BytesIO(b"Beta document project codename is BlueOcean.")
+
+    ingest_document(file=file_a, filename="alpha.txt", user_id=user_id)
+    ingest_document(file=file_b, filename="beta.txt", user_id=user_id)
+
+    res_alpha = answer_question(
+        question="What is the project codename?",
+        user_id=user_id,
+        doc_name="alpha.txt",
+    )
+    assert isinstance(res_alpha, dict)
+    assert "RedDragon" in res_alpha["answer"]
+
+    res_beta = answer_question(
+        question="What is the project codename?",
+        user_id=user_id,
+        doc_name="beta.txt",
+    )
+    assert isinstance(res_beta, dict)
+    assert "BlueOcean" in res_beta["answer"]
+

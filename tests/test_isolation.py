@@ -1,15 +1,14 @@
+import uuid
 from langchain_core.documents import Document
 
 from src.vector_store import add_documents, search_documents
 
 
+# Stores a private document each for two different customers, then checks that customer B's search never returns any content or metadata belonging to customer A.
+# This is the core multi-tenant security test: it fails if the vector store filtering by user_id is broken and one customer's data leaks into another's search results.
 def test_customer_data_isolation():
-    """
-    Verify that one customer cannot retrieve another customer's data.
-    """
-
-    customer_a = f"pytest_customer_a"
-    customer_b = f"pytest_customer_b"
+    customer_a = f"CUS_{uuid.uuid4().hex[:7].upper()}"
+    customer_b = f"CUS_{uuid.uuid4().hex[:7].upper()}"
 
     secret_a = "ALPHA_PRIVATE_PROJECT_XQZ987"
     secret_b = "BETA_PRIVATE_PROJECT_LMN456"
@@ -32,8 +31,23 @@ def test_customer_data_isolation():
         },
     )
 
+    from src.database import save_document_metadata
+
     add_documents([document_a], customer_a)
+    save_document_metadata(
+        customer_id=customer_a,
+        filename="customer_a_private.txt",
+        pages_processed=1,
+        chunks_stored=1,
+    )
+
     add_documents([document_b], customer_b)
+    save_document_metadata(
+        customer_id=customer_b,
+        filename="customer_b_private.txt",
+        pages_processed=1,
+        chunks_stored=1,
+    )
 
     # Customer A searches for its own secret
     results_a = search_documents(
