@@ -1,4 +1,6 @@
-# 🛡️ SecureRAG System
+<img src="src/assets/favicon.png" alt="SecureRAG logo" width="48" height="48" align="left" />
+
+# SecureRAG System
 
 SecureRAG is a production-grade, multi-tenant **Retrieval-Augmented Generation (RAG)** application built with Python, Streamlit, LangChain, and a dynamically-selected stack of LLM, vector store, and database providers.
 
@@ -8,14 +10,14 @@ It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perfor
 
 ## ✨ Key Features & Architecture Highlights
 
-- 🛡️ **Pre-Embedding PII & Secrets Masking**: Automatically detects and replaces sensitive information (SSN, Phone, Email, Passwords, API Keys, Credit Cards, Aadhaar, PAN, Bank Accounts) with protected placeholders *before* vector embeddings are generated or stored.
+- <img src="src/assets/favicon.png" width="16" height="16" alt="shield" /> **Pre-Embedding PII & Secrets Masking**: Automatically detects and replaces sensitive information (SSN, Phone, Email, Passwords, API Keys, Credit Cards, Aadhaar, PAN, Bank Accounts) with protected placeholders *before* vector embeddings are generated or stored.
 - 👥 **Strict Multi-Tenant Workspace Isolation**: Assigns a unique `Customer ID` metadata tag to every vector chunk. Vector store queries use a mandatory `filter={"user_id": customer_id}` to prevent cross-tenant data leakage.
 - 🧠 **Local Embedding Engine**: Generates 384-dimensional vector embeddings locally using Hugging Face (`all-MiniLM-L6-v2`), ensuring unmasked document content never leaves the secure local server.
 - 🤖 **Multi-Provider LLM Failover**: Dynamically routes questions through **Groq** (`openai/gpt-oss-120b`) as the primary model, with automatic failover to **Google Gemini** (`gemini-2.5-flash`) and backup Groq models if a provider rate-limits or is unavailable.
 - 🗂️ **Dual Vector Store Backend**: Uses **Pinecone** (cloud) when an API key is configured, and transparently falls back to a local **ChromaDB** store otherwise — no setup required for local development.
 - 📚 **Source & Page Attribution**: Every answer includes clickable references displaying the exact source filename and page numbers used for generation.
-- 🔐 **Placeholder Preservation**: Instructs the LLM never to guess, decode, or reveal raw sensitive values behind protected placeholders like `<PHONE_NUMBER>` or `<API_KEY>`.
-- 🛡️ **Indirect Prompt Injection Defense**: Treats retrieved document chunks strictly as read-only data, ignoring embedded commands or prompt override attempts inside documents.
+- <img src="src/assets/favicon.png" width="16" height="16" alt="shield" /> **Placeholder Preservation**: Instructs the LLM never to guess, decode, or reveal raw sensitive values behind protected placeholders like `<PHONE_NUMBER>` or `<API_KEY>`.
+- <img src="src/assets/favicon.png" width="16" height="16" alt="shield" /> **Indirect Prompt Injection Defense**: Treats retrieved document chunks strictly as read-only data, ignoring embedded commands or prompt override attempts inside documents.
 - 🎨 **Enterprise Multi-Page UI with Light/Dark Theme**: Built with Streamlit featuring a custom CSS design system, user authentication, interactive dashboard, document manager, chat history, profile, and system settings.
 - 🗄️ **Dual Database Backend & Soft Deletion**: Uses **PostgreSQL** when configured, falling back to a local **SQLite** database (`secure_rag.db`) automatically — supporting file management, soft deletion, and vector store cleanup safeguards.
 - 🧪 **Automated Test Suite**: 20 automated unit & integration tests covering PII masking, multi-tenant isolation, and RAG QA pipelines.
@@ -89,7 +91,7 @@ It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perfor
 
 ---
 
-## 🛡️ Security & Privacy Engine
+## <img src="src/assets/favicon.png" width="22" height="22" alt="shield" valign="middle" /> Security & Privacy Engine
 
 ### 1. PII & Secrets Masking Rules
 
