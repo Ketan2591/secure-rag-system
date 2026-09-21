@@ -1,4 +1,4 @@
-# 🔐 SecureRAG System
+# 🛡️ SecureRAG System
 
 SecureRAG is a production-grade, multi-tenant **Retrieval-Augmented Generation (RAG)** application built with Python, Streamlit, LangChain, and a dynamically-selected stack of LLM, vector store, and database providers.
 
@@ -89,7 +89,7 @@ It allows enterprise users to upload **PDF, DOCX, and TXT** documents and perfor
 
 ---
 
-## 🔐 Security & Privacy Engine
+## 🛡️ Security & Privacy Engine
 
 ### 1. PII & Secrets Masking Rules
 
